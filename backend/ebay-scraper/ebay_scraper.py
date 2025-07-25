@@ -1,8 +1,17 @@
-import requests
-import time
 import random
 import httpx
-# from urllib.parse import quote_plus
+import json
+import asyncio
+from typing import List
+from urllib.parse import urlencode
+from bs4 import BeautifulSoup
+
+
+SORTING_MAP = {
+    "best_match": 12,
+    "ending_soon": 1,
+    "newly_listed": 10
+}
 
 # Rotate around different agents to prevent IP Ban
 USER_AGENTS = [
@@ -19,32 +28,44 @@ def get_random_headers():
         "Accept-Language": "en-US,en;q=0.9"
     }
 
-def delay_search():
+async def delay_search():
     delay = random.uniform(2,6)
     print(f"Delay search for {delay:.2f} seconds...")
-    time.sleep(delay)
+    await asyncio.sleep(delay)
 
-def search(query: str) -> str:
 
-    try:
-        headers = get_random_headers()
-        print(f"Searching for {query}...")
-        url = f"https://www.ebay.com/sch/i.html?_nkw={query}"
+async def fetch_page(client: httpx.AsyncClient, url: str) -> httpx.Response:
+    await delay_search()
+    headers=get_random_headers()
+    response = await client.get(url,headers=headers)
+    response.raise_for_status()
+    if "captcha" in response.text.lower():
+        raise RuntimeError("Captcha Detected. Cannot scrape")
+    return response
+
+
+async def scrape(query: str, max_pages: int = 1, category: int = 0, items_per_page: int = 240, sort: str="newly_listed") -> str:
+    def build_url(page: int) -> str:
+        params = {
+            "_nkw": query,
+            "_sacat": category,
+            "_ipg": items_per_page,
+            "_sop": SORTING_MAP.get(sort),
+            "_pgn": page,
+        }
+
+        return f"https://www.ebay.com/sch/i.html?{urlencode(params)}"
+    
+    async with httpx.AsyncClient(http2=True, follow_redirects=True, timeout=10) as client:
+        url = build_url(1)
+        print(f"Fetch HTML from {url}...")
+        first_response = await fetch_page(client,url)
+        page = first_response.text
+
+        soup = BeautifulSoup(first_response, "lxml")
+        count_results = soup.select_one(".srp-controls__count-heading > span")
+        total_results_text = count_results.get_text(strip=True) if count_results else "0"
+        total_results = int(total_results_text.replace(",",""))
         
-        with httpx.Client(headers=headers, http2=True, follow_redirects=True, timeout=10) as session:
-            response = session.get(url)
-            if response.status_code == 200 and "captcha" not in response.text.lower():
-                return response.text
-            else:
-                print(f"Request blocked / failed: {response.status_code}")
-                return None
-    except Exception as e:
-        print(f"Error: {e}")
-
-if __name__ == "__main__":
-    query = input("Enter your eBay search: ")
-    html = search(query)
-
-    if html:
-        print(html)
-        
+        print(f"Total results from first page: {total_results}")
+        return page
