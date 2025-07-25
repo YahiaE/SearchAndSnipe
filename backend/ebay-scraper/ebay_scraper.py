@@ -7,13 +7,14 @@ from urllib.parse import urlencode
 from bs4 import BeautifulSoup
 
 
+# Sort fields on ebay
 SORTING_MAP = {
     "best_match": 12,
     "ending_soon": 1,
     "newly_listed": 10
 }
 
-# Rotate around different agents to prevent IP Ban
+# Rotate around different agents to prevent IP Ban / prevent Captcha
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
@@ -41,7 +42,7 @@ async def fetch_page(client: httpx.AsyncClient, url: str) -> httpx.Response:
     response.raise_for_status()
     if "captcha" in response.text.lower():
         raise RuntimeError("Captcha Detected. Cannot scrape")
-    return response
+    return response # returns HTML page of given URL if we don't hit a captcha
 
 
 async def scrape(query: str, max_pages: int = 1, category: int = 0, items_per_page: int = 240, sort: str="newly_listed") -> str:
@@ -63,9 +64,18 @@ async def scrape(query: str, max_pages: int = 1, category: int = 0, items_per_pa
         page = first_response.text
 
         soup = BeautifulSoup(first_response, "lxml")
-        count_results = soup.select_one(".srp-controls__count-heading > span")
-        total_results_text = count_results.get_text(strip=True) if count_results else "0"
-        total_results = int(total_results_text.replace(",",""))
+        count_results = soup.select("li.s-item")
         
-        print(f"Total results from first page: {total_results}")
+        print(f"Total results from first page: {len(count_results)}")
         return page
+
+# if __name__ == "__main__":
+
+#     async def test():
+#         from pathlib import Path
+#         query = input()
+#         pages = await scrape(query)
+#         Path("output.html").write_text(pages,encoding="utf-8")
+    
+#     asyncio.run(test())
+    
