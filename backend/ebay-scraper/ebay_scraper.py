@@ -29,14 +29,14 @@ def get_random_headers():
         "Accept-Language": "en-US,en;q=0.9"
     }
 
-async def delay_search():
-    delay = random.uniform(2,6)
+async def delay_search(min: int, max: int):
+    delay = random.uniform(min,max)
     print(f"Delay search for {delay:.2f} seconds...")
     await asyncio.sleep(delay)
 
 
-async def fetch_page(client: httpx.AsyncClient, url: str) -> httpx.Response:
-    await delay_search()
+async def fetch_page(client: httpx.AsyncClient, url: str, min: int, max: int) -> httpx.Response:
+    await delay_search(min,max)
     headers=get_random_headers()
     response = await client.get(url,headers=headers)
     response.raise_for_status()
@@ -60,7 +60,7 @@ async def scrape(query: str, max_pages: int = 1, category: int = 0, items_per_pa
     async with httpx.AsyncClient(http2=True, follow_redirects=True, timeout=10) as client:
         url = build_url(1)
         print(f"Fetch HTML from {url}...")
-        first_response = await fetch_page(client,url)
+        first_response = await fetch_page(client,url,2,6)
         page = first_response.text
 
         soup = BeautifulSoup(first_response, "lxml")
@@ -69,13 +69,13 @@ async def scrape(query: str, max_pages: int = 1, category: int = 0, items_per_pa
         print(f"Total results from first page: {len(count_results)}")
         return page
 
-# if __name__ == "__main__":
+if __name__ == "__main__":
 
-#     async def test():
-#         from pathlib import Path
-#         query = input()
-#         pages = await scrape(query)
-#         Path("output.html").write_text(pages,encoding="utf-8")
+    async def test():
+        from pathlib import Path
+        query = input()
+        pages = await scrape(query)
+        Path("output.html").write_text(pages,encoding="utf-8")
     
-#     asyncio.run(test())
+    asyncio.run(test())
     
